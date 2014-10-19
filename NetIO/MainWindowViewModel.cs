@@ -74,13 +74,15 @@ namespace NetIO
 
         private readonly DateTimeAxis _dateTimeAxis;
 
-        private readonly LinearAxis valueAxis;
+        private readonly LinearAxis _valueAxis;
 
         private readonly TimeSpan _maxTimeSpan = TimeSpan.FromSeconds(300);
 
         private long? _oldsentvalue;
         private long? _oldreceivedvalue;
         private readonly DispatcherTimer _timer;
+
+        private double _oldscale;
 
         public MainWindowViewModel()
         {
@@ -121,7 +123,7 @@ namespace NetIO
 
             Model.Axes.Add(_dateTimeAxis);
 
-            valueAxis = new LinearAxis
+            _valueAxis = new LinearAxis
             { 
                 Position = AxisPosition.Left,
                 Minimum = 0,
@@ -132,7 +134,7 @@ namespace NetIO
                 TickStyle = TickStyle.Crossing,
             };
 
-            Model.Axes.Add(valueAxis);
+            Model.Axes.Add(_valueAxis);
 
             _sentseries = new LineSeries
             {
@@ -201,27 +203,7 @@ namespace NetIO
                         _receivedSeries.Points.RemoveAll(d => d.X < DateTimeAxis.ToDouble(DateTime.Now - _maxTimeSpan));
                     }
 
-                    //if (_sentseries.Points.Any(d => d.Y >= 1024) || _receivedSeries.Points.Any(d => d.Y >= 1024))
-                    //{
-                    //    valueAxis.FormatAsFractions = true;
-                    //    valueAxis.FractionUnit = 1024;
-                    //    valueAxis.FractionUnitSymbol = " KB/s";
-                    //    valueAxis.Unit = "KB/s";
-                    //}
-                    //else if (_sentseries.Points.Any(d => d.Y >= 1048576) || _receivedSeries.Points.Any(d => d.Y >= 1048576))
-                    //{
-                    //    valueAxis.FormatAsFractions = true;
-                    //    valueAxis.FractionUnit = 1024;
-                    //    valueAxis.FractionUnitSymbol = " MB/s";
-                    //    valueAxis.Unit = "MB/s";
-                    //}
-                    //else
-                    //{
-                    //    valueAxis.FormatAsFractions = true;
-                    //    valueAxis.FractionUnit = 1;
-                    //    valueAxis.FractionUnitSymbol = " B/s";
-                    //    valueAxis.Unit = "B/s";
-                    //}
+                    SetScale();
                 }
             }
             LastUpdate = DateTime.Now;
@@ -252,6 +234,54 @@ namespace NetIO
                 if (_timer != null && !_timer.IsEnabled)
                     _timer.Start();
             }
+        }
+
+        private int RoundOff(double i)
+        {
+            if (Equals(i, 0.0))
+                return 1;
+            i += 5;
+            var ret = ((int)Math.Round(i / 10.0)) * 10;
+            if (Equals(ret, 0))
+                ret = 1;
+            return ret;
+        }
+
+        private void SetScale()
+        {
+            var maxsent = _sentseries.Points.Max(d => d.Y);
+            var maxreceived = _receivedSeries.Points.Max(d => d.Y);
+            var maxvalue = maxsent > maxreceived ? maxsent : maxreceived;
+
+            if (maxvalue.Equals(_oldscale))
+                return;
+
+            if (_sentseries.Points.Any(d => d.Y >= 1048576) || _receivedSeries.Points.Any(d => d.Y >= 1048576))
+            {
+                _valueAxis.FormatAsFractions = true;
+                _valueAxis.FractionUnit = 1048576;
+                //valueAxis.FractionUnitSymbol = " MB/s";
+                _valueAxis.Unit = "MB/s";
+                _valueAxis.MajorStep = 1048576 * RoundOff(Math.Round(maxvalue / (1048576 * 10)));
+            }
+            else if (_sentseries.Points.Any(d => d.Y >= 1024) || _receivedSeries.Points.Any(d => d.Y >= 1024))
+            {
+                _valueAxis.FormatAsFractions = true;
+                _valueAxis.FractionUnit = 1024;
+                //valueAxis.FractionUnitSymbol = " KB/s";
+                _valueAxis.Unit = "KB/s";
+                _valueAxis.MajorStep = 1024 * RoundOff(Math.Round(maxvalue / (1024 * 10)));
+            }
+            else
+            {
+                _valueAxis.FormatAsFractions = true;
+                _valueAxis.FractionUnit = 1;
+                //valueAxis.FractionUnitSymbol = " B/s";
+                _valueAxis.Unit = "B/s";
+                _valueAxis.MajorStep = RoundOff(Math.Round(maxvalue / 10));
+            }
+
+            _oldscale = maxvalue;
         }
     }
 }
